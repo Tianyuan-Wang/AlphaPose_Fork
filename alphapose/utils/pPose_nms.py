@@ -655,12 +655,20 @@ def PCK_match_fullbody(pick_pred, pred_score, all_preds, ref_dist):
     num_match_keypoints = (num_match_keypoints_body + num_match_keypoints_face + num_match_keypoints_hand) / mask.sum() / 2 * kp_nums
     return num_match_keypoints
 
-
+   
 def write_json(all_results, outputpath, form=None, for_eval=False, outputfile='alphapose-results.json'):
     '''
     all_result: result dict of predictions
     outputpath: output directory
     '''
+
+    def convert_to_serializable(obj):
+        if isinstance(obj, np.float32):  
+            return float(obj)
+        elif isinstance(obj, np.ndarray):  
+            return obj.tolist()
+        raise TypeError(f"Object of type {obj._class.name_} is not JSON serializable")
+    
     json_results = []
     json_results_cmu = {}
     for im_res in all_results:
@@ -685,68 +693,69 @@ def write_json(all_results, outputpath, form=None, for_eval=False, outputfile='a
             result['score'] = float(pro_scores)
             if 'box' in human.keys():
                 result['box'] = human['box']
-            #pose track results by PoseFlow
+            # pose track results by PoseFlow
             if 'idx' in human.keys():
                 result['idx'] = human['idx']
-            
-            # 3d pose
+
+            # 3D pose
             if 'pred_xyz_jts' in human.keys():
                 pred_xyz_jts = human['pred_xyz_jts']
-                pred_xyz_jts = pred_xyz_jts.cpu().numpy().tolist()
+                pred_xyz_jts = pred_xyz_jts.cpu().numpy().tolist()  
                 result['pred_xyz_jts'] = pred_xyz_jts
 
-            if form == 'cmu': # the form of CMU-Pose
+            if form == 'cmu': 
                 if result['image_id'] not in json_results_cmu.keys():
-                    json_results_cmu[result['image_id']]={}
-                    json_results_cmu[result['image_id']]['version']="AlphaPose v0.3"
-                    json_results_cmu[result['image_id']]['bodies']=[]
-                tmp={'joints':[]}
-                result['keypoints'].append((result['keypoints'][15]+result['keypoints'][18])/2)
-                result['keypoints'].append((result['keypoints'][16]+result['keypoints'][19])/2)
-                result['keypoints'].append((result['keypoints'][17]+result['keypoints'][20])/2)
-                indexarr=[0,51,18,24,30,15,21,27,36,42,48,33,39,45,6,3,12,9]
+                    json_results_cmu[result['image_id']] = {}
+                    json_results_cmu[result['image_id']]['version'] = "AlphaPose v0.3"
+                    json_results_cmu[result['image_id']]['bodies'] = []
+                tmp = {'joints': []}
+                result['keypoints'].append((result['keypoints'][15] + result['keypoints'][18]) / 2)
+                result['keypoints'].append((result['keypoints'][16] + result['keypoints'][19]) / 2)
+                result['keypoints'].append((result['keypoints'][17] + result['keypoints'][20]) / 2)
+                indexarr = [0, 51, 18, 24, 30, 15, 21, 27, 36, 42, 48, 33, 39, 45, 6, 3, 12, 9]
                 for i in indexarr:
                     tmp['joints'].append(result['keypoints'][i])
-                    tmp['joints'].append(result['keypoints'][i+1])
-                    tmp['joints'].append(result['keypoints'][i+2])
+                    tmp['joints'].append(result['keypoints'][i + 1])
+                    tmp['joints'].append(result['keypoints'][i + 2])
                 json_results_cmu[result['image_id']]['bodies'].append(tmp)
-            elif form == 'open': # the form of OpenPose
+            elif form == 'open':  # the form of OpenPose
                 if result['image_id'] not in json_results_cmu.keys():
-                    json_results_cmu[result['image_id']]={}
-                    json_results_cmu[result['image_id']]['version']="AlphaPose v0.3"
-                    json_results_cmu[result['image_id']]['people']=[]
-                tmp={'pose_keypoints_2d':[]}
-                result['keypoints'].append((result['keypoints'][15]+result['keypoints'][18])/2)
-                result['keypoints'].append((result['keypoints'][16]+result['keypoints'][19])/2)
-                result['keypoints'].append((result['keypoints'][17]+result['keypoints'][20])/2)
-                indexarr=[0,51,18,24,30,15,21,27,36,42,48,33,39,45,6,3,12,9]
+                    json_results_cmu[result['image_id']] = {}
+                    json_results_cmu[result['image_id']]['version'] = "AlphaPose v0.3"
+                    json_results_cmu[result['image_id']]['people'] = []
+                tmp = {'pose_keypoints_2d': []}
+                result['keypoints'].append((result['keypoints'][15] + result['keypoints'][18]) / 2)
+                result['keypoints'].append((result['keypoints'][16] + result['keypoints'][19]) / 2)
+                result['keypoints'].append((result['keypoints'][17] + result['keypoints'][20]) / 2)
+                indexarr = [0, 51, 18, 24, 30, 15, 21, 27, 36, 42, 48, 33, 39, 45, 6, 3, 12, 9]
                 for i in indexarr:
                     tmp['pose_keypoints_2d'].append(result['keypoints'][i])
-                    tmp['pose_keypoints_2d'].append(result['keypoints'][i+1])
-                    tmp['pose_keypoints_2d'].append(result['keypoints'][i+2])
+                    tmp['pose_keypoints_2d'].append(result['keypoints'][i + 1])
+                    tmp['pose_keypoints_2d'].append(result['keypoints'][i + 2])
                 json_results_cmu[result['image_id']]['people'].append(tmp)
             else:
                 json_results.append(result)
 
-    if form == 'cmu': # the form of CMU-Pose
+
+    if form == 'cmu':  
         with open(os.path.join(outputpath, outputfile), 'w') as json_file:
-            json_file.write(json.dumps(json_results_cmu))
-            if not os.path.exists(os.path.join(outputpath,'sep-json')):
-                os.mkdir(os.path.join(outputpath,'sep-json'))
+            json_file.write(json.dumps(json_results_cmu, default=convert_to_serializable))
+            if not os.path.exists(os.path.join(outputpath, 'sep-json')):
+                os.mkdir(os.path.join(outputpath, 'sep-json'))
             for name in json_results_cmu.keys():
-                with open(os.path.join(outputpath,'sep-json',name.split('.')[0]+'.json'),'w') as json_file:
-                    json_file.write(json.dumps(json_results_cmu[name]))
-    elif form == 'open': # the form of OpenPose
+                with open(os.path.join(outputpath, 'sep-json', name.split('.')[0] + '.json'), 'w') as json_file:
+                    json_file.write(json.dumps(json_results_cmu[name], default=convert_to_serializable))
+    elif form == 'open':  
         with open(os.path.join(outputpath, outputfile), 'w') as json_file:
-            json_file.write(json.dumps(json_results_cmu))
-            if not os.path.exists(os.path.join(outputpath,'sep-json')):
-                os.mkdir(os.path.join(outputpath,'sep-json'))
+            json_file.write(json.dumps(json_results_cmu, default=convert_to_serializable))
+            if not os.path.exists(os.path.join(outputpath, 'sep-json')):
+                os.mkdir(os.path.join(outputpath, 'sep-json'))
             for name in json_results_cmu.keys():
-                with open(os.path.join(outputpath,'sep-json',name.split('.')[0]+'.json'),'w') as json_file:
-                    json_file.write(json.dumps(json_results_cmu[name]))
+                with open(os.path.join(outputpath, 'sep-json', name.split('.')[0] + '.json'), 'w') as json_file:
+                    json_file.write(json.dumps(json_results_cmu[name], default=convert_to_serializable))
     else:
         with open(os.path.join(outputpath, outputfile), 'w') as json_file:
-            json_file.write(json.dumps(json_results))
+            json_file.write(json.dumps(json_results, default=convert_to_serializable))
 
 
 def ppose_nms_validate_preprocess(_res):
